@@ -1,118 +1,129 @@
 from ipdb import set_trace as debug
-import weakref
-import db as database
-from datum import Datum as D
-import computation
+import term
+from term import as_head, Term as T
+import database
+import askers
+from dispatch import Dispatcher
+import handlers
+import properties
+from builtins import builtin
+import fields
+import relayer
+import updates
+import context
 
-history_H = "represents a state with history of commands [history]"
-handler_H = "represents a state where questions are handled by [handler]"
-head_list_H = "represents a state which has seen expressions [heads]"
+state = term.simple("a state of the interpeter where [history] maps "
+    "strings to the user's historical response to those strings, "
+    "and where [computation] is invoked to handle computations",
+    'history', 'computation')
 
-class State(object):
-    """
-    Stores the state of an interpreter
+history = fields.named_binding(
+    "the function that maps an interpreter state to the history of commands that "
+    "have been entered in that state",
+    state.head,
+    'history'
+)
 
-    This includes the log of what has been typed, the list of commands that have been entered,
-    and the handler which processes new questions.
-    The state can be extended with new information as needed.
-
-    An instance of State stores a datum representing the state.
-    It also stores information about an element in the database where the state should be stored
-
-    State includes methods for translating data for storage in the database.
-    """
-
-
-    def __init__(self, 
-            db=None,
-            handle="current_interpreter_state", 
-            db_name="tooldb",collection_name="data",
-            state=None):
-
-        if db is None and db_name is not None and collection_name is not None:
-            db = database.Database(db_name,collection_name)
-
-        self.db = db
-        self.handle = db.make_id(handle) if self.db else None
-
-        if state is None and db is None:
-            raise Exception("Must provide either a starting strate or a database!")
-
-        self.state = state
-        if state is None: self.load_state()
-
-    #Loading and saving-----------------
-
-    def load_state(self):
-        if self.db is None:
-            raise Exception("Cannot load a state that is not associated with a database!")
-        self.state = self.db.load(self.handle)
-
-    def save_state(self):
-        if self.db is None:
-            raise Exception("Cannot save a state that is not associated with a database!")
-        self.db.save_as(self.state,self.handle)
-
-    def mockup(self):
-        """
-        Creates a copy of self which will be written to a different place in the database.
-        Invoked when we want a state, but don't want to save changes to that state.
-        """
-        return State(
-                handle = self.db.make_id(),
-                db = self.db,
-                state=self.state
-            )
-
-    #Getters and setters-----------------
-
-    def get_historical_heads(self):
-        for m in self.state.modifiers.to_list():
-            if m.head == head_list_H:
-                return m['heads']
-
-    def get_history(self):
-        for m in self.state.modifiers.to_list():
-            if m.head == history_H:
-                return m['history']
-        return None
-
-    def get_handler(self):
-        for m in self.state.modifiers.to_list():
-            if m.head == handler_H:
-                return m['handler']
-
-    def add_head(self,head):
-        def add_head_to_list(m):
-            if m.head == head_list_H:
-                l = m['heads']
-                return m.update(heads=D.make_list(head,l))
-            return None
-        self.state = self.state.modifier_map(add_head_to_list)
-
-    def replace_history(self,new_history):
-        def replace_history(m):
-            if m.head == history_H:
-                return m.update(history=new_history)
-            else:
-                return m
-        self.state = self.state.modifier_map(replace_history)
-
-    def set_history(self,a, b):
-        def set_history(m):
-            if m.head == history_H:
-                new_history = D.make_dict(D.from_str(a),D.from_str(b),m['history'])
-                return m.update(history=new_history)
-        self.state = self.state.modifier_map(set_history)
+handler = fields.named_binding(
+    "the function that maps an interpreter state to the computation invoked "
+    "to handle questions in that state",
+    state.head,
+    'computation'
+)
 
 def starting_state():
-    """
-    Return the starting state for a new interpreter
-    """
+    return state(T.from_dict({}), handlers.view_handler())
 
-    return D(
-            "a representation of a possible state of the interpreter",
-            [D(history_H, history=D.from_dict({})),
-             D(handler_H,handler=computation.simple_handler()),
-             D(head_list_H,heads=D.from_list([]))]
-        )
+#TODO it seems like somehow history should be a composite resource locator
+#(almost a composite field, but there is no object you are accessing it on...)
+#I could make it a field that you typically apply to a dummy object
+#that seems pretty ugly though
+
+@builtin("what is the current state of the interpreter?")
+def get_state(asker):
+    return asker.reply(answer=asker.state)
+
+@builtin("what computation should handle questions?")
+def get_handler(asker):
+    state = asker.ask(get_state()).firm_answer
+    return asker.ask_tail(fields.get_field(handler(), state))
+
+@builtin("apply [update] to the interpreter's state")
+def update_state(asker, update):
+    asker.update(update, asker.state)
+    return asker.reply()
+
+@builtin("what is the history of commands that have been entered?")
+def get_history(asker):
+    state = asker.ask(get_state()).firm_answer
+    return asker.ask_tail(fields.get_field(history(), state))
+
+@builtin("apply [update] to the history of commands that have been entered")
+def update_history(asker, update):
+    asker.ask(update_state(updates.apply_to_field(history(), update)))
+    asker.reply()
+
+use_state = term.simple("should be computed using interpreter state [state]", "state")
+is_state = term.simple("the state of the interpreter used to answer the referenced question")
+
+#FIXME the implementation of state changes seems very awkward
+#there are several levels of aberaction where a change occurs, and I don't know if I believe that it will
+#all work out...
+class StatefulAsker(context.ContextUpdater):
+
+    def __init__(self, Q, name="rootv5", db=None, collection=None, *args, **kwargs):
+        super(StatefulAsker, self).__init__(Q, *args, **kwargs)
+        self.db = None
+        self.name = None
+        if not hasattr(self, 'state'):
+            if isinstance(db, database.Termsbase):
+                self.db = database
+            else:
+                self.db = database.Termsbase(db=db, collection=collection)
+            self.name = name
+            try:
+                self.state = database.load_pointer(self.db, name)
+            except KeyError:
+                self.state = starting_state()
+        self.state_changed = False
+        self.tag(is_state(), self.state)
+
+    #FIXME decide between this and the dispatcher...
+    def process_query(self, other):
+        if other.head == use_state.head:
+            self.state = other['state']
+            return properties.trivial()
+        else:
+            return super(StatefulAsker, self).process_query(other)
+
+    def incoming_update(self, source, Q, update, repr_change=None):
+        if source.head == is_state.head:
+            self.update(update, self.state, repr_change)
+        else:
+            super(StatefulAsker, self).incoming_update(source, Q, update, repr_change)
+
+    def update(self, update, v, *args, **kwargs):
+        super(StatefulAsker, self).update(update, v, *args, **kwargs)
+        if v.id in self.internal:
+            internal = self.internal[v.id]
+            source = self.source[internal]
+            if source.head == is_state.head:
+                self.state = self.refresh(self.state)
+
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, new_value):
+        self.state_changed = True
+        assert(isinstance(new_value, T))
+        self._state = new_value
+
+    def ask(self, new_Q, **kwargs):
+        new_Q = new_Q.add(use_state(self.state))
+        reply = super(StatefulAsker, self).ask(new_Q, **kwargs)
+        if self.db is not None and self.state_changed:
+            database.save_as(self.db, self.name, self.state)
+            self.state_changed = False
+        return reply

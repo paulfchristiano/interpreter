@@ -1,6 +1,7 @@
 import re
 import os
 
+
 def unformat(test_string, format_string):
     x = re.search('^' + format_string.format('(.*)') + '$', test_string,flags=re.DOTALL)
     return None if x is None else x.group(1)
@@ -9,8 +10,12 @@ def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 class _Getch:
-    """Gets a single character from standard input.  Does not echo to the
-screen."""
+    """
+    Gets a single character from standard input.  
+    
+    Does not echo to the screen.
+    """
+
     def __init__(self):
         try:
             self.impl = _GetchWindows()
