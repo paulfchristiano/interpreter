@@ -33,7 +33,7 @@ import outlines
 import builtins
 import computations
 import term
-import types
+import termtypes
 import state
 import views
 import functions

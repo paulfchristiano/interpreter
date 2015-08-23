@@ -5,11 +5,11 @@ import term
 from term import Term as T
 import ints
 import builtins
-import types
-from types import is_type
+import termtypes
+from termtypes import is_type
 
-string_type = types.new_type("the type of strings")
-char_type = types.new_type("the type of characters")
+string_type = termtypes.new_type("the type of strings")
+char_type = termtypes.new_type("the type of characters")
 
 #Converting to strings----------------------------
 

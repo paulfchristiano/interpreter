@@ -5,7 +5,7 @@ import properties
 import fields
 from frozendict import frozendict
 import askers
-import types
+import termtypes
 
 #Representing terms--------------------------------
 
@@ -16,8 +16,8 @@ import types
 
 quoted_term = term.simple("a term with head [head] head and bindings [bindings]",
         'head', 'bindings')
-term_type = types.new_type("the type of terms")
-types.set_type(term_type, quoted_term)
+term_type = termtypes.new_type("the type of terms")
+termtypes.set_type(term_type, quoted_term)
 
 head = fields.named_binding(
     "the function that maps a term to its head",

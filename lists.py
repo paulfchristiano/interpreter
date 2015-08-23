@@ -15,10 +15,10 @@ import properties
 from properties import checker
 import updates
 from updates import updater
-import types
-from types import is_type
+import termtypes
+from termtypes import is_type
 
-list_type = types.new_type("the type of lists")
+list_type = termtypes.new_type("the type of lists")
 
 @is_type(list_type)
 @as_head(T.empty_list.head)

@@ -4,7 +4,7 @@ from term import Term as T
 import builtins
 from builtins import builtin
 import parsing
-import types
+import termtypes
 import pairs
 import ints
 import strings
@@ -300,7 +300,7 @@ def update_view(asker, view, input):
 #TODO add support for more rendering strategies?
 @builtins.builtin("what string should be used to render [x] for printing?")
 def render(asker, x):
-    t = asker.ask(types.type(x))
+    t = asker.ask(termtypes.type(x))
     if t.has_answer():
         return typed_renderer.dispatch(asker, t.answer, x)
 

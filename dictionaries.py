@@ -15,8 +15,8 @@ import booleans
 from frozendict import frozendict
 import functions
 import lists
-import types
-from types import is_type
+import termtypes
+from termtypes import is_type
 
 from ipdb import set_trace as debug
 
@@ -24,8 +24,8 @@ from ipdb import set_trace as debug
 cons = T.dict_cons
 empty = T.empty_dict
 
-dict_type = types.new_type("the type of dictionaries")
-types.set_types(dict_type, cons, empty)
+dict_type = termtypes.new_type("the type of dictionaries")
+termtypes.set_types(dict_type, cons, empty)
 
 image = term.simple("the function that maps a dictionary to the image of [k] in that dictionary", "k")
 

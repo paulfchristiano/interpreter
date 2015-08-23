@@ -1,11 +1,11 @@
 import term
 from term import Term as T
 import fields
-import types
+import termtypes
 
-pair_type = types.new_type("the type of pairs")
+pair_type = termtypes.new_type("the type of pairs")
 
-types.set_type(pair_type, T.pair)
+termtypes.set_type(pair_type, T.pair)
 
 def to_pair(asker, p):
     return (fields.get(asker, first(), p), fields.get(asker, second(), p))

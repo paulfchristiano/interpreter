@@ -5,10 +5,10 @@ import updates
 from updates import updater
 import convert
 from convert import converter
-import types
-from types import is_type
+import termtypes
+from termtypes import is_type
 
-int_type = types.new_type("the type of integers")
+int_type = termtypes.new_type("the type of integers")
 
 #Canonicalization---------------------------------
 
